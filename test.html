@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>Test Owner, App & Sub User Flow</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f5f7fa;
+      color: #333;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      text-align: center;
+      color: #2c3e50;
+      margin-bottom: 40px;
+    }
+
+    h2 {
+      margin-top: 30px;
+      color: #34495e;
+      border-left: 5px solid #3498db;
+      padding-left: 10px;
+    }
+
+    input,
+    select {
+      padding: 8px 10px;
+      margin: 8px 0;
+      width: 250px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+
+    input:focus,
+    select:focus {
+      border-color: #3498db;
+      outline: none;
+    }
+
+    button {
+      padding: 8px 14px;
+      margin: 8px 0;
+      background-color: #3498db;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    button:hover {
+      background-color: #2980b9;
+    }
+
+    section {
+      background: white;
+      border-radius: 10px;
+      padding: 15px 20px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+      margin-bottom: 20px;
+    }
+
+    label {
+      font-weight: bold;
+      display: block;
+      margin-top: 5px;
+    }
+
+    #log {
+      background: #1e1e1e;
+      color: #eee;
+      padding: 15px;
+      border-radius: 6px;
+      max-height: 300px;
+      overflow-y: auto;
+      font-size: 13px;
+    }
+  </style>
+
+</head>
+
+<body>
+  <h1>Test Owner, App & Sub User Flow</h1>
+
+  <!-- 0. Owner Register -->
+  <h2>0. Owner Register</h2>
+  <input id="regOwnerEmail" placeholder="Owner email">
+  <input id="regOwnerPass" type="password" placeholder="Owner password">
+  <button onclick="registerOwner()">Register Owner</button>
+
+  <!-- 1. Owner Login -->
+  <h2>1. Owner Login</h2>
+  <input id="ownerEmail" placeholder="Owner email">
+  <input id="ownerPass" type="password" placeholder="Owner password">
+  <button onclick="ownerLogin()">Login Owner</button>
+
+  <!-- 2. Owner Create App -->
+  <h2>2. Owner Create App</h2>
+  <input id="appName" placeholder="App name">
+  <button onclick="createApp()">Create App</button>
+
+
+  <!-- 3. Owner Create Sub User -->
+  <h2>3. Owner Create Sub User</h2>
+  <input id="subEmail" placeholder="Sub user email">
+  <input id="subPass" type="password" placeholder="Sub user password">
+  <select id="subRole">
+    <option value="user">user</option>
+    <option value="admin">admin</option>
+  </select>
+  <h2>APP</h2>
+  <label>Chọn App:</label>
+  <select id="appSelect"></select>
+  <button onclick="createSubUser()">Create Sub User</button>
+
+
+  <!-- 4. Sub User Login -->
+  <h2>4. Sub User Login</h2>
+  <input id="childEmail" placeholder="Sub user email">
+  <input id="childPass" type="password" placeholder="Sub user password">
+  <button onclick="childLogin()">Login Sub User</button>
+
+  <!-- 5. Sub User Create Collection -->
+  <h2>5. Create Collection for APP</h2>
+  <input id="colName" placeholder="Collection name">
+  <button onclick="createCollection()">Create</button>
+
+  <h2>All collection</h2>
+  <label>chọn collection</label>
+  <select id="collectionSelect">loadCollection</select>
+
+
+  <!-- 6. Sub User Remove Collection -->
+  <h2>6. Remove Collection for APP</h2>
+  <input id="colRemove" placeholder="Collection name">
+  <button onclick="removeCollection()">Remove</button>
+
+  <pre id="log"></pre>
+
+  <script>
+    const baseUrl = "http://localhost:3000";
+    let ownerId = "";
+    let ownerToken = "";
+    let appId = "";
+    let childToken = "";
+    let childId = "";
+    let colectionId = "";
+    function log(msg) {
+      document.getElementById("log").textContent += msg + "\n";
+    }
+
+    document.getElementById('appSelect').addEventListener('change', async function () {
+      const selectAppId = this.value;
+      await loadCollection(ownerId);
+    });
+    document.getElementById('collectionSelect').addEventListener('change', async function () {
+      const selectCollection = this.value;
+      document.getElementById('colRemove').value = selectCollection.split("_")[1];
+    })
+    // 0. Owner register
+    async function registerOwner() {
+      const email = document.getElementById("regOwnerEmail").value;
+      const password = document.getElementById("regOwnerPass").value;
+
+      const res = await fetch(baseUrl + "/auth/register/owner", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, role: "owner" })
+      });
+      const data = await res.json();
+      log(res.ok ? "Owner registered: " + JSON.stringify(data)
+        : "Owner register FAIL: " + JSON.stringify(data));
+    }
+
+    // 1. Owner login
+    async function ownerLogin() {
+      const email = document.getElementById("ownerEmail").value;
+      const password = document.getElementById("ownerPass").value;
+      const res = await fetch(baseUrl + "/auth/login/owner", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", },
+        body: JSON.stringify({ email, password, role: "owner" })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        ownerToken = data.accessToken;
+        ownerId = data.userId;
+        log("Owner login OK. ownerId=" + ownerId);
+        await loadApps(ownerId); // chỉ load app sau khi login thành công
+      } else {
+        log("Owner login FAIL: " + JSON.stringify(data));
+      }
+    }
+
+    // 2. Owner create app
+    async function createApp() {
+      if (!ownerToken) return log("Login owner first!");
+      const name = document.getElementById("appName").value;
+      const res = await fetch(baseUrl + "/apps/createNewOwnerApp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + ownerToken,
+          "x-owner-id": ownerId,
+        },
+        body: JSON.stringify({ name })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        appId = data.appId || data.app; // server có thể trả appId hoặc app
+        log("App created OK. appId=" + appId);
+        await loadApps(ownerId); // refresh danh sách app
+      } else {
+        log("Create app FAIL: " + JSON.stringify(data));
+      }
+    }
+
+    // 3. Owner tạo user con
+    async function createSubUser() {
+      if (!ownerId) return log("Login owner first!");
+      const appSelect = document.getElementById("appSelect");
+      const selectedAppId = appSelect.value; // <-- Lấy appId đang chọn
+      if (!selectedAppId) return log("Select an app first!");
+
+      const email = document.getElementById("subEmail").value;
+      const password = document.getElementById("subPass").value;
+      const role = document.getElementById("subRole").value;
+      const res = await fetch(baseUrl + "/auth/register/user", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-owner-id": ownerId,
+          "x-app-id": selectedAppId,// gửi appId đúng
+          "Authorization": "Bearer " + ownerToken,
+        },
+        body: JSON.stringify({ email, password, role })
+      });
+
+      const data = await res.json();
+      log(res.ok ? "Sub user created: " + JSON.stringify(data)
+        : "Create sub user FAIL: " + JSON.stringify(data));
+    }
+
+
+    // GET owner apps
+    async function loadApps(ownerId) {
+      try {
+        const res = await fetch(baseUrl + `/apps/fetchOwnerApps`, {
+          headers: { "Authorization": "Bearer " + ownerToken }
+        });
+        const apps = await res.json();
+        const select = document.getElementById('appSelect');
+        select.innerHTML = "";
+        apps.forEach(app => {
+          const opt = document.createElement('option');
+          opt.value = app.appId || app._id;
+          opt.textContent = app.name;
+          select.appendChild(opt);
+        });
+        if (apps.length > 0) appId = apps[0].appId || apps[0]._id;
+        log("Loaded " + apps.length + " apps.");
+        await loadCollection(ownerId); // chỉ load collection sau khi cload app
+      } catch (err) {
+        log("Load apps error: " + err.message);
+      }
+    }
+
+
+    // 4. Sub user login
+    async function childLogin() {
+      const email = document.getElementById("childEmail").value;
+      const password = document.getElementById("childPass").value;
+
+      const selectedAppId = document.getElementById("appSelect").value; // <-- Lấy appId đang chọn
+      if (!selectedAppId) return log("Select an app first!");
+      log("app ID: " + selectedAppId);
+      log("Owner ID: " + ownerId);
+      log(ownerToken);
+      const res = await fetch(baseUrl + "/auth/login/user", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-owner-id": ownerId,
+          "x-app-id": selectedAppId,
+          "Authorization": "Bearer " + ownerToken,
+        },
+        body: JSON.stringify({ email, password })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        childToken = data.accessToken;
+      } else {
+        log("Sub user login FAIL: " + JSON.stringify(data));
+      }
+    }
+
+    // 5. Sub user create collection
+    async function createCollection() {
+      const selectAppId = document.getElementById("appSelect").value;
+      log("creating collection for: " + selectAppId);
+      if (!ownerId) { return log("Please Login Owner") };
+      if (!selectAppId) { return log("please create new app") };
+      log("owner: " + ownerId);
+      log("ownerToken: " + ownerToken);
+      const name = document.getElementById("colName").value;
+      const res = await fetch(baseUrl + "/manager/create-collection", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + ownerToken,
+          "x-app-id": selectAppId,
+          "x-owner-id": ownerId,
+        },
+        body: JSON.stringify({ name })
+      });
+      const data = await res.json().catch(() => null);
+      loadCollection(ownerId);
+      log("Create collection status=" + res.status + " body=" + JSON.stringify(data));
+    }
+
+    // 6. Sub user remove collection
+    async function removeCollection() {
+      const selectAppId = document.getElementById("appSelect").value;
+      const name = document.getElementById("colRemove").value;
+
+      const res = await fetch(baseUrl + "/manager/remove-collection", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + ownerToken,
+          "x-app-id": selectAppId,
+          "x-owner-id": ownerId,
+        },
+        body: JSON.stringify({ name })
+      });
+      const data = await res.json().catch(() => null);
+      log("Remove collection status=" + res.status + " body=" + JSON.stringify(data));
+    }
+    async function loadCollection(ownerId) {
+      try {
+        const selectAppId = document.getElementById("appSelect").value;
+        try {
+          const res = await fetch(baseUrl + "/manager/fetch-collection", {
+            headers: {
+              "Authorization": "Bearer " + ownerToken,
+              "x-app-id": selectAppId,
+              "x-owner-id": ownerId,
+            }
+          });
+
+          // Kiểm tra HTTP status trước khi parse JSON
+          if (!res.ok) {
+            const errorText = await res.text();
+            throw new Error(`Server returned ${res.status}: ${errorText}`);
+          }
+
+          const collections = await res.json(); // ✅ đổi tên rõ nghĩa
+          const select = document.getElementById('collectionSelect');
+          select.innerHTML = "";
+
+          collections.forEach(col => {
+            const opt = document.createElement('option');
+            opt.value = col.collectionId + "_" + col.name.split("_")[1] || col._id + "_" + col.name.split("_")[1];
+            opt.textContent = col.name.split("_")[1];
+            select.appendChild(opt);
+          });
+
+          if (collections.length > 0) {
+            collectionId = collections[0]._id || collections[0].name;
+          }
+
+          log(`Loaded ${collections.length} collections.`);
+        } catch (err) {
+          log("Load collections error: " + err.message);
+          console.error(err);
+        }
+      } catch (err) {
+        log("Load collections error: " + err.message);
+        console.error(err);
+      }
+    }
+  </script>
+</body>
+
+</html>
